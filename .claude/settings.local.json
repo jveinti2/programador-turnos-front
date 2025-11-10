@@ -1,0 +1,11 @@
+{
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "shadcn"
+  ],
+  "permissions": {
+    "allow": [
+      "Bash(npx shadcn@latest add:*)"
+    ]
+  }
+}
