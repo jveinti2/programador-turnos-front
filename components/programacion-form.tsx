@@ -38,16 +38,7 @@ export function ProgramacionForm() {
   const { updateAgentsCsv, loading: uploadLoading } = useAgents();
   const { generateSchedule, optimizeSchedule, loading: scheduleLoading } = useSchedule();
 
-  const handleFileSelect = React.useCallback((selectedFile: File | null) => {
-    setFile(selectedFile);
-    if (selectedFile) {
-      parseCSV(selectedFile);
-    } else {
-      setAgents([]);
-    }
-  }, []);
-
-  const parseCSV = async (file: File) => {
+  const parseCSV = React.useCallback(async (file: File) => {
     const text = await file.text();
     const lines = text.split("\n").filter((line) => line.trim());
 
@@ -68,7 +59,16 @@ export function ProgramacionForm() {
 
       setAgents(parsedAgents);
     }
-  };
+  }, []);
+
+  const handleFileSelect = React.useCallback((selectedFile: File | null) => {
+    setFile(selectedFile);
+    if (selectedFile) {
+      parseCSV(selectedFile);
+    } else {
+      setAgents([]);
+    }
+  }, [parseCSV]);
 
   const handleUploadCSV = async () => {
     if (!file) return;

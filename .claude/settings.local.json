@@ -1,11 +1,13 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(mkdir:*)",
+      "Bash(pnpm add:*)"
+    ]
+  },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "shadcn"
-  ],
-  "permissions": {
-    "allow": [
-      "Bash(npx shadcn@latest add:*)"
-    ]
-  }
+  ]
 }

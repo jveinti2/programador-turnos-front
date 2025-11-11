@@ -78,6 +78,14 @@ const data = {
           title: "Programación",
           url: "/dashboard/programacion",
         },
+        {
+          title: "Agente",
+          url: "/dashboard/agente",
+        },
+        {
+          title: "Piloto",
+          url: "/dashboard/piloto",
+        },
       ],
     },
   ],
