@@ -11,7 +11,14 @@ import {
 } from "@/components/ui/card";
 import { FileUploadDropzone } from "@/components/file-upload-dropzone";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, AlertCircle, Sparkles, Play, Upload } from "lucide-react";
+import {
+  Loader2,
+  AlertCircle,
+  Sparkles,
+  Play,
+  Upload,
+  Settings2,
+} from "lucide-react";
 import {
   Collapsible,
   CollapsibleContent,
@@ -31,12 +38,21 @@ interface Agent {
 export function ProgramacionForm() {
   const [file, setFile] = React.useState<File | null>(null);
   const [agents, setAgents] = React.useState<Agent[]>([]);
-  const [scheduleResults, setScheduleResults] = React.useState<ScheduleEntry[] | null>(null);
-  const [deficitInfo, setDeficitInfo] = React.useState<{ tiene_deficit: boolean; detalles?: string } | null>(null);
+  const [scheduleResults, setScheduleResults] = React.useState<
+    ScheduleEntry[] | null
+  >(null);
+  const [deficitInfo, setDeficitInfo] = React.useState<{
+    tiene_deficit: boolean;
+    detalles?: string;
+  } | null>(null);
   const [csvSectionOpen, setCsvSectionOpen] = React.useState(false);
 
   const { updateAgentsCsv, loading: uploadLoading } = useAgents();
-  const { generateSchedule, optimizeSchedule, loading: scheduleLoading } = useSchedule();
+  const {
+    generateSchedule,
+    optimizeSchedule,
+    loading: scheduleLoading,
+  } = useSchedule();
 
   const parseCSV = React.useCallback(async (file: File) => {
     const text = await file.text();
@@ -61,14 +77,17 @@ export function ProgramacionForm() {
     }
   }, []);
 
-  const handleFileSelect = React.useCallback((selectedFile: File | null) => {
-    setFile(selectedFile);
-    if (selectedFile) {
-      parseCSV(selectedFile);
-    } else {
-      setAgents([]);
-    }
-  }, [parseCSV]);
+  const handleFileSelect = React.useCallback(
+    (selectedFile: File | null) => {
+      setFile(selectedFile);
+      if (selectedFile) {
+        parseCSV(selectedFile);
+      } else {
+        setAgents([]);
+      }
+    },
+    [parseCSV]
+  );
 
   const handleUploadCSV = async () => {
     if (!file) return;
@@ -123,15 +142,15 @@ export function ProgramacionForm() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="lg:col-span-2">
+      <div className="grid grid-cols-3 gap-6">
+        <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Play className="h-5 w-5" />
               Generar Horario
             </CardTitle>
             <CardDescription>
-              Utiliza el solver CP-SAT para generar el horario óptimo basado en los datos del servidor
+              Utiliza el solver CP-SAT para generar el horario
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -139,7 +158,9 @@ export function ProgramacionForm() {
               <div className="flex items-start gap-2 rounded-md bg-amber-500/10 p-3 text-amber-600 dark:text-amber-500">
                 <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
                 <div className="text-sm">
-                  <p className="font-semibold">Advertencia: Déficit Detectado</p>
+                  <p className="font-semibold">
+                    Advertencia: Déficit Detectado
+                  </p>
                   <p>{deficitInfo.detalles}</p>
                 </div>
               </div>
@@ -163,12 +184,13 @@ export function ProgramacionForm() {
               )}
             </Button>
             <p className="text-xs text-muted-foreground text-center">
-              Este proceso utiliza los datos de agentes y demanda almacenados en el servidor
+              Este proceso utiliza los datos de agentes y demanda almacenados en
+              el servidor
             </p>
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-2">
+        <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5" />
@@ -199,98 +221,130 @@ export function ProgramacionForm() {
               )}
             </Button>
             <p className="text-xs text-muted-foreground text-center">
-              El LLM analizará y optimizará el horario actual usando el system prompt configurado
+              El LLM analizará y optimizará el horario actual usando el system
+              prompt configurado
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Settings2 className="h-5 w-5" />
+              Programar manualmente
+            </CardTitle>
+            <CardDescription>
+              Modifica el horario manualmente según consideres
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Button
+              onClick={handleOptimizeSchedule}
+              disabled={scheduleLoading}
+              size="lg"
+              className="w-full"
+              variant="secondary"
+            >
+              {scheduleLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Optimizando...
+                </>
+              ) : (
+                <>
+                  <Settings2 className="mr-2 h-4 w-4" />
+                  Modificar manualmente
+                </>
+              )}
+            </Button>
+            <p className="text-xs text-muted-foreground text-center">
+              El LLM analizará y optimizará el horario actual usando el system
+              prompt configurado
             </p>
           </CardContent>
         </Card>
       </div>
 
-      <Collapsible open={csvSectionOpen} onOpenChange={setCsvSectionOpen}>
-        <Card>
-          <CollapsibleTrigger className="w-full">
-            <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
-              <div className="flex items-center justify-between">
-                <div className="text-left flex items-center gap-2">
-                  <Upload className="h-5 w-5" />
-                  <div>
-                    <CardTitle>Actualizar CSV de Agentes (Opcional)</CardTitle>
-                    <CardDescription>
-                      Sube un nuevo archivo CSV para actualizar los datos en el servidor
-                    </CardDescription>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="text-left flex items-center gap-2">
+              <Upload className="h-5 w-5" />
+              <div>
+                <CardTitle>Actualizar CSV de Agentes (Opcional)</CardTitle>
+                <CardDescription>
+                  Sube un nuevo archivo CSV para actualizar los datos en el
+                  servidor
+                </CardDescription>
+              </div>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4 pt-4">
+          <FileUploadDropzone
+            onFileSelect={handleFileSelect}
+            accept=".csv"
+            maxSizeMB={5}
+          />
+
+          {agents.length > 0 && (
+            <>
+              <Separator />
+              <div>
+                <h3 className="text-sm font-medium mb-3">
+                  Registros Detectados ({agents.length})
+                </h3>
+                <div className="rounded-md border">
+                  <div className="max-h-48 overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead className="sticky top-0 bg-muted">
+                        <tr className="border-b">
+                          <th className="text-left p-3 font-medium">ID</th>
+                          <th className="text-left p-3 font-medium">Nombre</th>
+                          <th className="text-left p-3 font-medium">Día</th>
+                          <th className="text-left p-3 font-medium">Bloque</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {agents.slice(0, 10).map((agent, idx) => (
+                          <tr key={idx} className="border-b last:border-0">
+                            <td className="p-3">{agent.id}</td>
+                            <td className="p-3">{agent.nombre}</td>
+                            <td className="p-3">{agent.dia}</td>
+                            <td className="p-3">{agent.bloque}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
+                {agents.length > 10 && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Mostrando 10 de {agents.length} registros
+                  </p>
+                )}
               </div>
-            </CardHeader>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <CardContent className="space-y-4 pt-4">
-              <FileUploadDropzone
-                onFileSelect={handleFileSelect}
-                accept=".csv"
-                maxSizeMB={5}
-              />
-
-              {agents.length > 0 && (
-                <>
-                  <Separator />
-                  <div>
-                    <h3 className="text-sm font-medium mb-3">
-                      Registros Detectados ({agents.length})
-                    </h3>
-                    <div className="rounded-md border">
-                      <div className="max-h-48 overflow-y-auto">
-                        <table className="w-full text-sm">
-                          <thead className="sticky top-0 bg-muted">
-                            <tr className="border-b">
-                              <th className="text-left p-3 font-medium">ID</th>
-                              <th className="text-left p-3 font-medium">Nombre</th>
-                              <th className="text-left p-3 font-medium">Día</th>
-                              <th className="text-left p-3 font-medium">Bloque</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {agents.slice(0, 10).map((agent, idx) => (
-                              <tr key={idx} className="border-b last:border-0">
-                                <td className="p-3">{agent.id}</td>
-                                <td className="p-3">{agent.nombre}</td>
-                                <td className="p-3">{agent.dia}</td>
-                                <td className="p-3">{agent.bloque}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                    {agents.length > 10 && (
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Mostrando 10 de {agents.length} registros
-                      </p>
-                    )}
-                  </div>
-                  <Button
-                    onClick={handleUploadCSV}
-                    disabled={uploadLoading}
-                    size="lg"
-                    className="w-full"
-                  >
-                    {uploadLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Subiendo al servidor...
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="mr-2 h-4 w-4" />
-                        Subir CSV al Servidor
-                      </>
-                    )}
-                  </Button>
-                </>
-              )}
-            </CardContent>
-          </CollapsibleContent>
-        </Card>
-      </Collapsible>
+              <Button
+                onClick={handleUploadCSV}
+                disabled={uploadLoading}
+                size="lg"
+                className="w-full"
+              >
+                {uploadLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Subiendo al servidor...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="mr-2 h-4 w-4" />
+                    Subir CSV al Servidor
+                  </>
+                )}
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {scheduleResults && scheduleResults.length > 0 && (
         <Card>
