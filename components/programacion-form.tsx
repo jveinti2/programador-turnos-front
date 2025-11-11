@@ -10,35 +10,33 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { FileUploadDropzone } from "@/components/file-upload-dropzone";
-import { StepsIndicator } from "@/components/steps-indicator";
 import { Separator } from "@/components/ui/separator";
-
-const STEPS = [
-  {
-    label: "Programación",
-    description: "Solver optimiza turnos",
-  },
-  {
-    label: "Post-procesamiento",
-    description: "LLM ajusta horarios",
-  },
-  {
-    label: "Ajustes Manuales",
-    description: "Revisión final",
-  },
-];
+import { Loader2, AlertCircle, Sparkles, Play, Upload } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { useAgents, useSchedule } from "@/hooks/api";
+import { toast } from "sonner";
+import type { ScheduleEntry } from "@/lib/types";
 
 interface Agent {
   id: string;
   nombre: string;
-  disponibilidad?: string;
+  dia: string;
+  bloque: string;
 }
 
 export function ProgramacionForm() {
   const [file, setFile] = React.useState<File | null>(null);
   const [agents, setAgents] = React.useState<Agent[]>([]);
-  const [currentStep, setCurrentStep] = React.useState(1);
-  const [isProcessing, setIsProcessing] = React.useState(false);
+  const [scheduleResults, setScheduleResults] = React.useState<ScheduleEntry[] | null>(null);
+  const [deficitInfo, setDeficitInfo] = React.useState<{ tiene_deficit: boolean; detalles?: string } | null>(null);
+  const [csvSectionOpen, setCsvSectionOpen] = React.useState(false);
+
+  const { updateAgentsCsv, loading: uploadLoading } = useAgents();
+  const { generateSchedule, optimizeSchedule, loading: scheduleLoading } = useSchedule();
 
   const handleFileSelect = React.useCallback((selectedFile: File | null) => {
     setFile(selectedFile);
@@ -53,17 +51,17 @@ export function ProgramacionForm() {
     const text = await file.text();
     const lines = text.split("\n").filter((line) => line.trim());
 
-    if (lines.length > 0) {
-      const headers = lines[0].split(",").map((h) => h.trim());
+    if (lines.length > 1) {
       const parsedAgents: Agent[] = [];
 
       for (let i = 1; i < lines.length; i++) {
         const values = lines[i].split(",").map((v) => v.trim());
-        if (values.length >= 1 && values[0]) {
+        if (values.length >= 4) {
           parsedAgents.push({
-            id: `agent-${i}`,
-            nombre: values[0],
-            disponibilidad: values[1] || "No especificada",
+            id: values[0],
+            nombre: values[1],
+            dia: values[2],
+            bloque: values[3],
           });
         }
       }
@@ -72,127 +70,282 @@ export function ProgramacionForm() {
     }
   };
 
-  const handleStartProgramacion = () => {
+  const handleUploadCSV = async () => {
     if (!file) return;
 
-    setIsProcessing(true);
-    console.log("Iniciando programación con archivo:", file.name);
-    console.log("Agentes detectados:", agents);
+    const csvContent = await file.text();
+    const result = await updateAgentsCsv(csvContent);
 
-    setTimeout(() => {
-      setCurrentStep(2);
-      setIsProcessing(false);
-    }, 2000);
+    if (result.success) {
+      toast.success("Archivo CSV cargado exitosamente en el backend");
+      setCsvSectionOpen(false);
+    } else {
+      toast.error(result.error || "No se pudo cargar el archivo");
+    }
+  };
+
+  const handleGenerateSchedule = async () => {
+    const result = await generateSchedule();
+
+    if (result) {
+      if (result.success && result.schedules) {
+        setScheduleResults(result.schedules);
+        setDeficitInfo(result.deficit_info || null);
+        toast.success("Horario generado exitosamente con el solver CP-SAT");
+      } else {
+        toast.error(result.message || "No se pudo generar el horario");
+        if (result.deficit_info?.tiene_deficit) {
+          setDeficitInfo(result.deficit_info);
+        }
+      }
+    }
+  };
+
+  const handleOptimizeSchedule = async () => {
+    const result = await optimizeSchedule();
+
+    if (result) {
+      if (result.success && result.optimized_schedules) {
+        setScheduleResults(result.optimized_schedules);
+        toast.success("Horario optimizado exitosamente con LLM");
+      } else {
+        toast.error(result.message || "No se pudo optimizar el horario");
+      }
+    }
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Programación de Turnos</h1>
-          <p className="text-muted-foreground">
-            Carga el archivo de agentes e inicia el proceso de programación
-          </p>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold">Programación de Turnos</h1>
+        <p className="text-muted-foreground">
+          Genera y optimiza horarios con solver CP-SAT e IA
+        </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Progreso</CardTitle>
-          <CardDescription>
-            Sigue el proceso de programación en tres etapas
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <StepsIndicator steps={STEPS} currentStep={currentStep} />
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Play className="h-5 w-5" />
+              Generar Horario
+            </CardTitle>
+            <CardDescription>
+              Utiliza el solver CP-SAT para generar el horario óptimo basado en los datos del servidor
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {deficitInfo?.tiene_deficit && (
+              <div className="flex items-start gap-2 rounded-md bg-amber-500/10 p-3 text-amber-600 dark:text-amber-500">
+                <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
+                <div className="text-sm">
+                  <p className="font-semibold">Advertencia: Déficit Detectado</p>
+                  <p>{deficitInfo.detalles}</p>
+                </div>
+              </div>
+            )}
+            <Button
+              onClick={handleGenerateSchedule}
+              disabled={scheduleLoading}
+              size="lg"
+              className="w-full"
+            >
+              {scheduleLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Generando horario...
+                </>
+              ) : (
+                <>
+                  <Play className="mr-2 h-4 w-4" />
+                  Generar Horario con CP-SAT
+                </>
+              )}
+            </Button>
+            <p className="text-xs text-muted-foreground text-center">
+              Este proceso utiliza los datos de agentes y demanda almacenados en el servidor
+            </p>
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Cargar Archivo de Agentes</CardTitle>
-          <CardDescription>
-            Sube un archivo CSV con la información de los agentes disponibles
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <FileUploadDropzone
-            onFileSelect={handleFileSelect}
-            accept=".csv"
-            maxSizeMB={5}
-          />
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5" />
+              Optimizar con LLM
+            </CardTitle>
+            <CardDescription>
+              Mejora el horario generado usando inteligencia artificial
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Button
+              onClick={handleOptimizeSchedule}
+              disabled={scheduleLoading}
+              size="lg"
+              className="w-full"
+              variant="secondary"
+            >
+              {scheduleLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Optimizando...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Optimizar con IA
+                </>
+              )}
+            </Button>
+            <p className="text-xs text-muted-foreground text-center">
+              El LLM analizará y optimizará el horario actual usando el system prompt configurado
+            </p>
+          </CardContent>
+        </Card>
+      </div>
 
-          {agents.length > 0 && (
-            <>
-              <Separator />
-              <div>
-                <h3 className="text-sm font-medium mb-3">
-                  Agentes Detectados ({agents.length})
-                </h3>
-                <div className="rounded-md border">
-                  <div className="max-h-48 overflow-y-auto">
-                    <table className="w-full text-sm">
-                      <thead className="sticky top-0 bg-muted">
-                        <tr className="border-b">
-                          <th className="text-left p-3 font-medium">Nombre</th>
-                          <th className="text-left p-3 font-medium">
-                            Disponibilidad
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {agents.map((agent) => (
-                          <tr key={agent.id} className="border-b last:border-0">
-                            <td className="p-3">{agent.nombre}</td>
-                            <td className="p-3 text-muted-foreground">
-                              {agent.disponibilidad}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+      <Collapsible open={csvSectionOpen} onOpenChange={setCsvSectionOpen}>
+        <Card>
+          <CollapsibleTrigger className="w-full">
+            <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+              <div className="flex items-center justify-between">
+                <div className="text-left flex items-center gap-2">
+                  <Upload className="h-5 w-5" />
+                  <div>
+                    <CardTitle>Actualizar CSV de Agentes (Opcional)</CardTitle>
+                    <CardDescription>
+                      Sube un nuevo archivo CSV para actualizar los datos en el servidor
+                    </CardDescription>
                   </div>
                 </div>
               </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+            </CardHeader>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <CardContent className="space-y-4 pt-4">
+              <FileUploadDropzone
+                onFileSelect={handleFileSelect}
+                accept=".csv"
+                maxSizeMB={5}
+              />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Iniciar Proceso</CardTitle>
-          <CardDescription>
-            Comienza la programación automática de turnos
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button
-            onClick={handleStartProgramacion}
-            disabled={!file || isProcessing}
-            size="lg"
-            className="w-full"
-          >
-            {isProcessing ? "Procesando..." : "Iniciar Programación"}
-          </Button>
-        </CardContent>
-      </Card>
+              {agents.length > 0 && (
+                <>
+                  <Separator />
+                  <div>
+                    <h3 className="text-sm font-medium mb-3">
+                      Registros Detectados ({agents.length})
+                    </h3>
+                    <div className="rounded-md border">
+                      <div className="max-h-48 overflow-y-auto">
+                        <table className="w-full text-sm">
+                          <thead className="sticky top-0 bg-muted">
+                            <tr className="border-b">
+                              <th className="text-left p-3 font-medium">ID</th>
+                              <th className="text-left p-3 font-medium">Nombre</th>
+                              <th className="text-left p-3 font-medium">Día</th>
+                              <th className="text-left p-3 font-medium">Bloque</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {agents.slice(0, 10).map((agent, idx) => (
+                              <tr key={idx} className="border-b last:border-0">
+                                <td className="p-3">{agent.id}</td>
+                                <td className="p-3">{agent.nombre}</td>
+                                <td className="p-3">{agent.dia}</td>
+                                <td className="p-3">{agent.bloque}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                    {agents.length > 10 && (
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Mostrando 10 de {agents.length} registros
+                      </p>
+                    )}
+                  </div>
+                  <Button
+                    onClick={handleUploadCSV}
+                    disabled={uploadLoading}
+                    size="lg"
+                    className="w-full"
+                  >
+                    {uploadLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Subiendo al servidor...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="mr-2 h-4 w-4" />
+                        Subir CSV al Servidor
+                      </>
+                    )}
+                  </Button>
+                </>
+              )}
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
 
-      {currentStep > 1 && (
+      {scheduleResults && scheduleResults.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Resultados</CardTitle>
+            <CardTitle>Resultados del Horario</CardTitle>
             <CardDescription>
-              Visualiza y gestiona los turnos generados
+              {scheduleResults.length} entradas de horario generadas
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="rounded-md bg-muted p-8 text-center">
-              <p className="text-sm text-muted-foreground">
-                La visualización de resultados y ajustes manuales se implementará
-                próximamente.
-              </p>
+            <div className="rounded-md border">
+              <div className="max-h-96 overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-muted">
+                    <tr className="border-b">
+                      <th className="text-left p-3 font-medium">Agente</th>
+                      <th className="text-left p-3 font-medium">Nombre</th>
+                      <th className="text-left p-3 font-medium">Día</th>
+                      <th className="text-left p-3 font-medium">Bloque</th>
+                      <th className="text-left p-3 font-medium">Tipo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scheduleResults.slice(0, 50).map((entry, idx) => (
+                      <tr key={idx} className="border-b last:border-0">
+                        <td className="p-3">{entry.agent_id}</td>
+                        <td className="p-3">{entry.nombre}</td>
+                        <td className="p-3">{entry.dia}</td>
+                        <td className="p-3">
+                          {entry.bloque_inicio}-{entry.bloque_fin}
+                        </td>
+                        <td className="p-3">
+                          <span
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                              entry.tipo === "trabajo"
+                                ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
+                                : entry.tipo === "pausa_corta"
+                                ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
+                                : "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300"
+                            }`}
+                          >
+                            {entry.tipo}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
+            {scheduleResults.length > 50 && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Mostrando 50 de {scheduleResults.length} entradas
+              </p>
+            )}
           </CardContent>
         </Card>
       )}

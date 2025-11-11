@@ -16,102 +16,100 @@ import {
 } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { ChevronDown } from "lucide-react";
-
-interface ReglasFormData {
-  turnos: {
-    duracion_min_horas: number;
-    duracion_max_horas: number;
-    tipo_restriccion: "exacta" | "flexible" | "rango";
-  };
-  pausas: {
-    duracion_minutos: number;
-    frecuencia_cada_horas: number;
-    obligatorias: boolean;
-    separacion_minima_horas: number;
-    prohibir_primera_hora: boolean;
-    prohibir_ultima_hora: boolean;
-    maximo_por_turno: number;
-  };
-  almuerzo: {
-    duracion_min_minutos: number;
-    duracion_max_minutos: number;
-    obligatorio_si_turno_supera_horas: number;
-    ventana_inicio_hora: number;
-    ventana_fin_hora: number;
-  };
-  cobertura: {
-    requisitos: Record<string, number>;
-    permitir_deficit: boolean;
-    bloquear_si_deficit: boolean;
-  };
-}
+import { Badge } from "@/components/ui/badge";
+import { ChevronDown, Loader2, AlertCircle } from "lucide-react";
+import { useRules } from "@/hooks/api";
+import type { ReglasYAML } from "@/lib/types";
+import { toast } from "sonner";
 
 export function ReglasForm() {
-  const [formData, setFormData] = React.useState<ReglasFormData>({
-    turnos: {
-      duracion_min_horas: 8,
-      duracion_max_horas: 9,
-      tipo_restriccion: "rango",
-    },
-    pausas: {
-      duracion_minutos: 15,
-      frecuencia_cada_horas: 3,
-      obligatorias: true,
-      separacion_minima_horas: 2.5,
-      prohibir_primera_hora: true,
-      prohibir_ultima_hora: true,
-      maximo_por_turno: 4,
-    },
-    almuerzo: {
-      duracion_min_minutos: 30,
-      duracion_max_minutos: 60,
-      obligatorio_si_turno_supera_horas: 6,
-      ventana_inicio_hora: 12,
-      ventana_fin_hora: 14,
-    },
-    cobertura: {
-      requisitos: {},
-      permitir_deficit: false,
-      bloquear_si_deficit: true,
-    },
-  });
+  const { rules, loading, error, updateRules } = useRules();
+  const [formData, setFormData] = React.useState<ReglasYAML | null>(null);
 
   const [openSections, setOpenSections] = React.useState<Record<string, boolean>>({
     turnos: true,
     pausas: false,
     almuerzo: false,
+    solver: false,
     cobertura: false,
   });
+
+  React.useEffect(() => {
+    if (rules) {
+      setFormData(rules);
+    }
+  }, [rules]);
+
+  const isDirty = React.useMemo(() => {
+    if (!rules || !formData) return false;
+    return JSON.stringify(rules) !== JSON.stringify(formData);
+  }, [rules, formData]);
 
   const toggleSection = (section: string) => {
     setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Reglas a enviar al backend:", formData);
-    // Aquí se enviará al backend
+    if (!formData) return;
+
+    const result = await updateRules(formData);
+    if (result.success) {
+      toast.success("Reglas actualizadas exitosamente");
+    } else {
+      toast.error(result.error || "No se pudieron guardar las reglas");
+    }
   };
+
+  if (loading && !formData) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (error && !formData) {
+    return (
+      <div className="rounded-md bg-destructive/10 p-4 text-destructive">
+        <p className="font-semibold">Error al cargar las reglas</p>
+        <p className="text-sm">{error}</p>
+      </div>
+    );
+  }
+
+  if (!formData) return null;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Configuración de Reglas</h1>
-          <p className="text-muted-foreground">
-            Define las restricciones para la programación de turnos
-          </p>
+        <div className="flex items-center gap-3">
+          <div>
+            <h1 className="text-2xl font-bold">Configuración de Reglas</h1>
+            <p className="text-muted-foreground">
+              Define las restricciones para la programación de turnos
+            </p>
+          </div>
+          {isDirty && (
+            <Badge variant="secondary" className="flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" />
+              Cambios sin guardar
+            </Badge>
+          )}
         </div>
-        <Button type="submit">Guardar Reglas</Button>
+        <Button type="submit" disabled={loading || !isDirty}>
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Guardando...
+            </>
+          ) : !isDirty ? (
+            "Sin cambios"
+          ) : (
+            "Guardar Reglas"
+          )}
+        </Button>
       </div>
 
       {/* Sección Turnos */}
@@ -145,14 +143,15 @@ export function ReglasForm() {
                   <Input
                     id="duracion_min_horas"
                     type="number"
-                    step="0.5"
+                    min="1"
+                    max="24"
                     value={formData.turnos.duracion_min_horas}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
                         turnos: {
                           ...formData.turnos,
-                          duracion_min_horas: parseFloat(e.target.value),
+                          duracion_min_horas: parseInt(e.target.value),
                         },
                       })
                     }
@@ -163,14 +162,55 @@ export function ReglasForm() {
                   <Input
                     id="duracion_max_horas"
                     type="number"
-                    step="0.5"
+                    min="1"
+                    max="24"
                     value={formData.turnos.duracion_max_horas}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
                         turnos: {
                           ...formData.turnos,
-                          duracion_max_horas: parseFloat(e.target.value),
+                          duracion_max_horas: parseInt(e.target.value),
+                        },
+                      })
+                    }
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="duracion_total_max_horas">Duración Total Máxima (horas)</Label>
+                  <Input
+                    id="duracion_total_max_horas"
+                    type="number"
+                    min="1"
+                    max="24"
+                    value={formData.turnos.duracion_total_max_horas}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        turnos: {
+                          ...formData.turnos,
+                          duracion_total_max_horas: parseInt(e.target.value),
+                        },
+                      })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="descanso_entre_turnos_horas">Descanso entre Turnos (horas)</Label>
+                  <Input
+                    id="descanso_entre_turnos_horas"
+                    type="number"
+                    min="0"
+                    max="24"
+                    value={formData.turnos.descanso_entre_turnos_horas}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        turnos: {
+                          ...formData.turnos,
+                          descanso_entre_turnos_horas: parseInt(e.target.value),
                         },
                       })
                     }
@@ -178,25 +218,23 @@ export function ReglasForm() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="tipo_restriccion">Tipo de Restricción</Label>
-                <Select
-                  value={formData.turnos.tipo_restriccion}
-                  onValueChange={(value: "exacta" | "flexible" | "rango") =>
+                <Label htmlFor="dias_libres_min_por_semana">Días Libres Mínimos por Semana</Label>
+                <Input
+                  id="dias_libres_min_por_semana"
+                  type="number"
+                  min="0"
+                  max="7"
+                  value={formData.turnos.dias_libres_min_por_semana}
+                  onChange={(e) =>
                     setFormData({
                       ...formData,
-                      turnos: { ...formData.turnos, tipo_restriccion: value },
+                      turnos: {
+                        ...formData.turnos,
+                        dias_libres_min_por_semana: parseInt(e.target.value),
+                      },
                     })
                   }
-                >
-                  <SelectTrigger id="tipo_restriccion">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="exacta">Exacta</SelectItem>
-                    <SelectItem value="flexible">Flexible</SelectItem>
-                    <SelectItem value="rango">Rango</SelectItem>
-                  </SelectContent>
-                </Select>
+                />
               </div>
             </CardContent>
           </CollapsibleContent>
@@ -234,12 +272,14 @@ export function ReglasForm() {
                   <Input
                     id="duracion_pausas_minutos"
                     type="number"
-                    value={formData.pausas.duracion_minutos}
+                    min="1"
+                    max="60"
+                    value={formData.pausas_cortas.duracion_minutos}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        pausas: {
-                          ...formData.pausas,
+                        pausas_cortas: {
+                          ...formData.pausas_cortas,
                           duracion_minutos: parseInt(e.target.value),
                         },
                       })
@@ -252,12 +292,14 @@ export function ReglasForm() {
                     id="frecuencia_cada_horas"
                     type="number"
                     step="0.5"
-                    value={formData.pausas.frecuencia_cada_horas}
+                    min="0.5"
+                    max="12"
+                    value={formData.pausas_cortas.frecuencia_cada_horas}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        pausas: {
-                          ...formData.pausas,
+                        pausas_cortas: {
+                          ...formData.pausas_cortas,
                           frecuencia_cada_horas: parseFloat(e.target.value),
                         },
                       })
@@ -274,12 +316,14 @@ export function ReglasForm() {
                     id="separacion_minima_horas"
                     type="number"
                     step="0.5"
-                    value={formData.pausas.separacion_minima_horas}
+                    min="0"
+                    max="12"
+                    value={formData.pausas_cortas.separacion_minima_horas}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        pausas: {
-                          ...formData.pausas,
+                        pausas_cortas: {
+                          ...formData.pausas_cortas,
                           separacion_minima_horas: parseFloat(e.target.value),
                         },
                       })
@@ -291,12 +335,14 @@ export function ReglasForm() {
                   <Input
                     id="maximo_por_turno"
                     type="number"
-                    value={formData.pausas.maximo_por_turno}
+                    min="0"
+                    max="10"
+                    value={formData.pausas_cortas.maximo_por_turno}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        pausas: {
-                          ...formData.pausas,
+                        pausas_cortas: {
+                          ...formData.pausas_cortas,
                           maximo_por_turno: parseInt(e.target.value),
                         },
                       })
@@ -309,11 +355,11 @@ export function ReglasForm() {
                   <Label htmlFor="pausas_obligatorias">Pausas Obligatorias</Label>
                   <Switch
                     id="pausas_obligatorias"
-                    checked={formData.pausas.obligatorias}
+                    checked={formData.pausas_cortas.obligatorias}
                     onCheckedChange={(checked) =>
                       setFormData({
                         ...formData,
-                        pausas: { ...formData.pausas, obligatorias: checked },
+                        pausas_cortas: { ...formData.pausas_cortas, obligatorias: checked },
                       })
                     }
                   />
@@ -324,11 +370,11 @@ export function ReglasForm() {
                   </Label>
                   <Switch
                     id="prohibir_primera_hora"
-                    checked={formData.pausas.prohibir_primera_hora}
+                    checked={formData.pausas_cortas.prohibir_primera_hora}
                     onCheckedChange={(checked) =>
                       setFormData({
                         ...formData,
-                        pausas: { ...formData.pausas, prohibir_primera_hora: checked },
+                        pausas_cortas: { ...formData.pausas_cortas, prohibir_primera_hora: checked },
                       })
                     }
                   />
@@ -337,11 +383,11 @@ export function ReglasForm() {
                   <Label htmlFor="prohibir_ultima_hora">Prohibir Última Hora</Label>
                   <Switch
                     id="prohibir_ultima_hora"
-                    checked={formData.pausas.prohibir_ultima_hora}
+                    checked={formData.pausas_cortas.prohibir_ultima_hora}
                     onCheckedChange={(checked) =>
                       setFormData({
                         ...formData,
-                        pausas: { ...formData.pausas, prohibir_ultima_hora: checked },
+                        pausas_cortas: { ...formData.pausas_cortas, prohibir_ultima_hora: checked },
                       })
                     }
                   />
@@ -417,65 +463,146 @@ export function ReglasForm() {
                   />
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="obligatorio_si_turno_supera">
-                  Obligatorio si Turno Supera (horas)
-                </Label>
-                <Input
-                  id="obligatorio_si_turno_supera"
-                  type="number"
-                  step="0.5"
-                  value={formData.almuerzo.obligatorio_si_turno_supera_horas}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      almuerzo: {
-                        ...formData.almuerzo,
-                        obligatorio_si_turno_supera_horas: parseFloat(e.target.value),
-                      },
-                    })
-                  }
-                />
-                <p className="text-sm text-muted-foreground">
-                  0 = nunca obligatorio
-                </p>
-              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="ventana_inicio_hora">
-                    Ventana Inicio (hora del día)
+                  <Label htmlFor="obligatorio_si_turno_mayor_a_horas">
+                    Obligatorio si Turno Mayor a (horas)
                   </Label>
                   <Input
-                    id="ventana_inicio_hora"
+                    id="obligatorio_si_turno_mayor_a_horas"
                     type="number"
+                    step="0.5"
                     min="0"
-                    max="23"
-                    value={formData.almuerzo.ventana_inicio_hora}
+                    max="12"
+                    value={formData.almuerzo.obligatorio_si_turno_mayor_a_horas}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
                         almuerzo: {
                           ...formData.almuerzo,
-                          ventana_inicio_hora: parseInt(e.target.value),
+                          obligatorio_si_turno_mayor_a_horas: parseFloat(e.target.value),
+                        },
+                      })
+                    }
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    0 = nunca obligatorio
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="maximo_por_turno_almuerzo">Máximo por Turno</Label>
+                  <Input
+                    id="maximo_por_turno_almuerzo"
+                    type="number"
+                    min="0"
+                    max="5"
+                    value={formData.almuerzo.maximo_por_turno}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        almuerzo: {
+                          ...formData.almuerzo,
+                          maximo_por_turno: parseInt(e.target.value),
+                        },
+                      })
+                    }
+                  />
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="prohibir_primera_hora_almuerzo">
+                    Prohibir Primera Hora
+                  </Label>
+                  <Switch
+                    id="prohibir_primera_hora_almuerzo"
+                    checked={formData.almuerzo.prohibir_primera_hora}
+                    onCheckedChange={(checked) =>
+                      setFormData({
+                        ...formData,
+                        almuerzo: { ...formData.almuerzo, prohibir_primera_hora: checked },
+                      })
+                    }
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="prohibir_ultima_hora_almuerzo">Prohibir Última Hora</Label>
+                  <Switch
+                    id="prohibir_ultima_hora_almuerzo"
+                    checked={formData.almuerzo.prohibir_ultima_hora}
+                    onCheckedChange={(checked) =>
+                      setFormData({
+                        ...formData,
+                        almuerzo: { ...formData.almuerzo, prohibir_ultima_hora: checked },
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
+
+      {/* Sección Solver */}
+      <Collapsible
+        open={openSections.solver}
+        onOpenChange={() => toggleSection("solver")}
+      >
+        <Card>
+          <CollapsibleTrigger className="w-full">
+            <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+              <div className="flex items-center justify-between">
+                <div className="text-left">
+                  <CardTitle>Solver</CardTitle>
+                  <CardDescription>
+                    Configuración del solver CP-SAT
+                  </CardDescription>
+                </div>
+                <ChevronDown
+                  className={`h-5 w-5 transition-transform ${
+                    openSections.solver ? "rotate-180" : ""
+                  }`}
+                />
+              </div>
+            </CardHeader>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="timeout_segundos">Timeout (segundos)</Label>
+                  <Input
+                    id="timeout_segundos"
+                    type="number"
+                    min="1"
+                    max="3600"
+                    value={formData.solver.timeout_segundos}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        solver: {
+                          ...formData.solver,
+                          timeout_segundos: parseInt(e.target.value),
                         },
                       })
                     }
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="ventana_fin_hora">Ventana Fin (hora del día)</Label>
+                  <Label htmlFor="num_workers">Número de Workers</Label>
                   <Input
-                    id="ventana_fin_hora"
+                    id="num_workers"
                     type="number"
-                    min="0"
-                    max="23"
-                    value={formData.almuerzo.ventana_fin_hora}
+                    min="1"
+                    max="128"
+                    value={formData.solver.num_workers}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        almuerzo: {
-                          ...formData.almuerzo,
-                          ventana_fin_hora: parseInt(e.target.value),
+                        solver: {
+                          ...formData.solver,
+                          num_workers: parseInt(e.target.value),
                         },
                       })
                     }
@@ -499,7 +626,7 @@ export function ReglasForm() {
                 <div className="text-left">
                   <CardTitle>Cobertura</CardTitle>
                   <CardDescription>
-                    Requisitos de cobertura por bloque horario
+                    Configuración de cobertura y déficit
                   </CardDescription>
                 </div>
                 <ChevronDown
@@ -512,44 +639,51 @@ export function ReglasForm() {
           </CollapsibleTrigger>
           <CollapsibleContent>
             <CardContent className="space-y-4">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="permitir_deficit">Permitir Déficit</Label>
-                  <Switch
-                    id="permitir_deficit"
-                    checked={formData.cobertura.permitir_deficit}
-                    onCheckedChange={(checked) =>
-                      setFormData({
-                        ...formData,
-                        cobertura: { ...formData.cobertura, permitir_deficit: checked },
-                      })
-                    }
-                  />
-                </div>
-                <div className="flex items-center justify-between">
+              <div className="space-y-2">
+                <Label htmlFor="margen_seguridad">Margen de Seguridad</Label>
+                <Input
+                  id="margen_seguridad"
+                  type="number"
+                  step="0.1"
+                  min="1"
+                  max="3"
+                  value={formData.cobertura.margen_seguridad}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      cobertura: {
+                        ...formData.cobertura,
+                        margen_seguridad: parseFloat(e.target.value),
+                      },
+                    })
+                  }
+                />
+                <p className="text-sm text-muted-foreground">
+                  Factor multiplicador para la demanda (ej. 1.2 = 20% más cobertura)
+                </p>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
                   <Label htmlFor="bloquear_si_deficit">
                     Bloquear si Hay Déficit
                   </Label>
-                  <Switch
-                    id="bloquear_si_deficit"
-                    checked={formData.cobertura.bloquear_si_deficit}
-                    onCheckedChange={(checked) =>
-                      setFormData({
-                        ...formData,
-                        cobertura: {
-                          ...formData.cobertura,
-                          bloquear_si_deficit: checked,
-                        },
-                      })
-                    }
-                  />
+                  <p className="text-sm text-muted-foreground">
+                    No generar horario si hay déficit de agentes
+                  </p>
                 </div>
-              </div>
-              <div className="rounded-md bg-muted p-4">
-                <p className="text-sm text-muted-foreground">
-                  Los requisitos de cobertura por bloque horario se configurarán en
-                  una sección específica próximamente.
-                </p>
+                <Switch
+                  id="bloquear_si_deficit"
+                  checked={formData.cobertura.bloquear_si_deficit}
+                  onCheckedChange={(checked) =>
+                    setFormData({
+                      ...formData,
+                      cobertura: {
+                        ...formData.cobertura,
+                        bloquear_si_deficit: checked,
+                      },
+                    })
+                  }
+                />
               </div>
             </CardContent>
           </CollapsibleContent>
