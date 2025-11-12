@@ -68,14 +68,44 @@ export interface AgentScheduleResponse {
   schedule: ScheduleEntry[];
 }
 
-export interface GenerateScheduleResponse {
-  success: boolean;
+export interface CoverageByDay {
+  dia: number;
+  demanda: number;
+  cobertura: number;
+}
+
+export interface DeficitGap {
+  day: number;
+  day_name: string;
+  start_time: string;
+  end_time: string;
+  required_agents: number;
+  available_agents: number;
+  deficit: number;
+}
+
+export interface DeficitAnalysis {
+  has_deficit: boolean;
+  has_critical_gaps: boolean;
+  total_deficit_hours: number;
+  gaps: DeficitGap[];
+}
+
+export interface DeficitRecommendation {
   message: string;
-  schedules?: ScheduleEntry[];
-  deficit_info?: {
-    tiene_deficit: boolean;
-    detalles?: string;
-  };
+  additional_agents_needed: number;
+  problematic_days: string[];
+  severity: "critical" | "warning" | "info";
+}
+
+export interface GenerateScheduleResponse {
+  status: "OPTIMAL" | "FEASIBLE" | "INFEASIBLE" | "insufficient_coverage";
+  message?: string;
+  agentes_disponibles?: number;
+  agentes_faltantes?: number;
+  cobertura_por_dia?: CoverageByDay[];
+  deficit_analysis?: DeficitAnalysis;
+  recommendation?: DeficitRecommendation;
 }
 
 export interface OptimizeScheduleRequest {
@@ -101,6 +131,19 @@ export interface UpdateScheduleResponse {
 export interface HealthResponse {
   status: string;
   timestamp?: string;
+}
+
+export interface DashboardMetric {
+  title: string;
+  value: string;
+  description: string;
+}
+
+export interface DemandCoveragePoint {
+  time: string;
+  block: number;
+  demanda: number;
+  disponibilidad: number;
 }
 
 export interface ApiError {

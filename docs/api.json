@@ -23,6 +23,75 @@
         }
       }
     },
+    "/dashboard-metrics": {
+      "get": {
+        "summary": "Dashboard Metrics",
+        "description": "Get dashboard metrics showing system overview.\n\nReturns weekly aggregated metrics:\n- Agentes Disponibles: Total agents in the system\n- Agentes Requeridos: Peak demand across the week\n- Nivel de Servicio: Average coverage percentage (coverage/demand * 100)\n\nRequires that schedules have been generated first with /generate-schedule.\n\n**Example Response:**\n```json\n[\n  {\n    \"title\": \"Agentes Disponibles\",\n    \"value\": \"8\",\n    \"description\": \"Agentes activos en el sistema\"\n  },\n  {\n    \"title\": \"Agentes Requeridos\",\n    \"value\": \"24\",\n    \"description\": \"Según demanda semanal\"\n  },\n  {\n    \"title\": \"Nivel de Servicio\",\n    \"value\": \"95.5%\",\n    \"description\": \"Cobertura de demanda\"\n  }\n]\n```\n\nReturns:\n    List of metric objects with title, value, description, icon, and color\n\nRaises:\n    404: Required files not found (agents, demand, or schedules)\n    500: Failed to calculate metrics",
+        "operationId": "dashboard_metrics_dashboard_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "title": "Response Dashboard Metrics Dashboard Metrics Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/demand-coverage-chart": {
+      "get": {
+        "summary": "Demand Coverage Chart",
+        "description": "Get demand and coverage data for a specific day.\n\nReturns 48 time blocks (30-minute intervals) for the specified day,\neach containing demand and actual coverage (disponibilidad).\n\n**Query Parameters:**\n- **day** (required): Day of week (0=Monday, 1=Tuesday, ..., 6=Sunday)\n\n**Example Request:**\n```\nGET /demand-coverage-chart?day=0\n```\n\n**Example Response:**\n```json\n[\n  {\n    \"time\": \"00:00\",\n    \"block\": 0,\n    \"demanda\": 3,\n    \"disponibilidad\": 2\n  },\n  {\n    \"time\": \"00:30\",\n    \"block\": 1,\n    \"demanda\": 2,\n    \"disponibilidad\": 2\n  },\n  ...48 blocks total\n]\n```\n\nArgs:\n    day: Day of week (0-6, where 0=Monday, 6=Sunday)\n\nReturns:\n    List of 48 time blocks with demand and coverage data\n\nRaises:\n    400: Invalid day parameter (must be 0-6)\n    404: Required files not found (demand or schedules)\n    500: Failed to retrieve coverage data",
+        "operationId": "demand_coverage_chart_demand_coverage_chart_get",
+        "parameters": [
+          {
+            "name": "day",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Day"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response Demand Coverage Chart Demand Coverage Chart Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/generate-schedule": {
       "post": {
         "summary": "Generate Schedule",
@@ -108,18 +177,14 @@
     "/update-schedule": {
       "put": {
         "summary": "Update Schedule",
-        "description": "Manually update schedule.\n\nReceives complete schedule and overwrites output/schedules.json.\n\n**Request Body (JSON):**\n```json\n[\n  {\n    \"id\": \"A001\",\n    \"name\": \"Juan Pérez\",\n    \"schedule\": {\n      \"lunes\": {\n        \"start\": \"07:30\",\n        \"end\": \"16:00\",\n        \"break\": [\n          {\n            \"start\": \"12:30\",\n            \"end\": \"12:45\"\n          }\n        ],\n        \"disconnected\": []\n      }\n    }\n  }\n]\n```\n\n**Example Response:**\n```json\n{\n  \"status\": \"success\",\n  \"message\": \"Schedule updated successfully\",\n  \"statistics\": {\n    \"total_agents\": 8,\n    \"total_shifts\": 30\n  }\n}\n```\n\nReturns:\n    Success message with statistics\n\nRaises:\n    400: Invalid schedule format\n    500: Failed to write file",
+        "description": "Manually update schedule from CSV.\n\nReceives schedule in CSV format and overwrites output/schedules.json.\n\n**Request Body (text/plain):**\nSend the CSV content as plain text in the request body.\n\n**CSV Format (Long Format):**\n```\nagent_id,agent_name,day,shift_start,shift_end,break_start,break_end,disconnected_start,disconnected_end\nA001,Juan Pérez,lunes,08:00,17:30,09:30,09:45,,\nA001,Juan Pérez,lunes,08:00,17:30,13:00,13:15,,\nA001,Juan Pérez,martes,09:00,18:30,09:00,09:15,,\nA002,María García,lunes,10:00,17:00,10:00,10:15,,\n...\n```\n\n**Column Descriptions:**\n- **agent_id**: Agent unique identifier (e.g., \"A001\")\n- **agent_name**: Agent full name\n- **day**: Day name (lunes, martes, miercoles, jueves, viernes, sabado, domingo)\n- **shift_start**: Shift start time (HH:MM format)\n- **shift_end**: Shift end time (HH:MM format)\n- **break_start**: Break start time (optional, leave empty if no break in this row)\n- **break_end**: Break end time (optional, leave empty if no break in this row)\n- **disconnected_start**: Disconnected period start time (optional, leave empty if no lunch in this row)\n- **disconnected_end**: Disconnected period end time (optional, leave empty if no lunch in this row)\n\n**Data Model:**\n- Each row can represent: shift info only, shift + break, or shift + disconnected period\n- Multiple rows with same agent_id + day = same shift with multiple breaks/disconnected periods\n- Empty break/disconnected fields = no break/disconnected in that row\n\n**Validation Rules:**\n- Required headers: agent_id, agent_name, day, shift_start, shift_end\n- **agent_id**: Non-empty string\n- **agent_name**: Non-empty string\n- **day**: One of: lunes, martes, miercoles, jueves, viernes, sabado, domingo\n- **shift_start**: Non-empty time in HH:MM format\n- **shift_end**: Non-empty time in HH:MM format\n\n**Example Request (curl):**\n```bash\ncurl -X PUT http://localhost:8000/update-schedule \\\n  -H \"Content-Type: text/plain\" \\\n  --data-binary @schedules.csv\n```\n\n**Example Request (JavaScript fetch):**\n```javascript\nconst csvContent = \"agent_id,agent_name,day,shift_start,shift_end,break_start,break_end,disconnected_start,disconnected_end\\nA001,Juan Pérez,lunes,08:00,17:30,09:30,09:45,,\\n\";\n\nfetch('http://localhost:8000/update-schedule', {\n  method: 'PUT',\n  headers: { 'Content-Type': 'text/plain' },\n  body: csvContent\n});\n```\n\n**Example Response:**\n```json\n{\n  \"status\": \"success\",\n  \"message\": \"Schedule updated successfully\",\n  \"statistics\": {\n    \"total_agents\": 8,\n    \"total_shifts\": 30\n  }\n}\n```\n\nReturns:\n    Success message with statistics\n\nRaises:\n    400: Invalid CSV format or data\n    500: Failed to write file",
         "operationId": "update_schedule_update_schedule_put",
         "requestBody": {
           "content": {
-            "application/json": {
+            "text/plain": {
               "schema": {
-                "items": {
-                  "additionalProperties": true,
-                  "type": "object"
-                },
-                "type": "array",
-                "title": "Schedule"
+                "type": "string",
+                "title": "Csv Content"
               }
             }
           },

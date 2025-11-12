@@ -3,7 +3,6 @@ import type {
   GenerateScheduleResponse,
   OptimizeScheduleRequest,
   OptimizeScheduleResponse,
-  UpdateScheduleRequest,
   UpdateScheduleResponse,
   AgentScheduleResponse,
 } from "@/lib/types";
@@ -29,8 +28,8 @@ export const scheduleService = {
     return apiClient.post<OptimizeScheduleResponse>(endpoint);
   },
 
-  async updateSchedule(request: UpdateScheduleRequest): Promise<UpdateScheduleResponse> {
-    return apiClient.put<UpdateScheduleResponse, UpdateScheduleRequest>("/update-schedule", request);
+  async updateSchedule(csvContent: string): Promise<UpdateScheduleResponse> {
+    return apiClient.put<UpdateScheduleResponse, string>("/update-schedule", csvContent, true);
   },
 
   async getAgentSchedule(agentId: string): Promise<AgentScheduleResponse> {

@@ -18,6 +18,7 @@ import {
   Play,
   Upload,
   Settings2,
+  Download,
 } from "lucide-react";
 import {
   Collapsible,
@@ -27,6 +28,11 @@ import {
 import { useAgents, useSchedule } from "@/hooks/api";
 import { toast } from "sonner";
 import type { ScheduleEntry } from "@/lib/types";
+import {
+  generateExampleScheduleCSV,
+  downloadCSV,
+  validateScheduleCSV,
+} from "@/lib/utils/csv-helpers";
 
 interface Agent {
   id: string;
@@ -46,11 +52,14 @@ export function ProgramacionForm() {
     detalles?: string;
   } | null>(null);
   const [csvSectionOpen, setCsvSectionOpen] = React.useState(false);
+  const [scheduleFile, setScheduleFile] = React.useState<File | null>(null);
+  const [schedulePreview, setSchedulePreview] = React.useState<string>("");
 
   const { updateAgentsCsv, loading: uploadLoading } = useAgents();
   const {
     generateSchedule,
     optimizeSchedule,
+    updateSchedule,
     loading: scheduleLoading,
   } = useSchedule();
 
@@ -107,15 +116,25 @@ export function ProgramacionForm() {
     const result = await generateSchedule();
 
     if (result) {
-      if (result.success && result.schedules) {
-        setScheduleResults(result.schedules);
-        setDeficitInfo(result.deficit_info || null);
+      if (result.status === "OPTIMAL" || result.status === "FEASIBLE") {
         toast.success("Horario generado exitosamente con el solver CP-SAT");
+
+        if (result.cobertura_por_dia) {
+          const message = `Agentes disponibles: ${result.agentes_disponibles || 0}`;
+          toast.info(message);
+        }
+      } else if (result.status === "insufficient_coverage") {
+        toast.error(result.message || "No hay suficientes agentes para cubrir la demanda");
+
+        if (result.deficit_analysis?.has_deficit) {
+          const deficitMessage = result.recommendation?.message || "Se detectó un déficit de cobertura";
+          setDeficitInfo({
+            tiene_deficit: true,
+            detalles: deficitMessage,
+          });
+        }
       } else {
         toast.error(result.message || "No se pudo generar el horario");
-        if (result.deficit_info?.tiene_deficit) {
-          setDeficitInfo(result.deficit_info);
-        }
       }
     }
   };
@@ -129,6 +148,52 @@ export function ProgramacionForm() {
         toast.success("Horario optimizado exitosamente con LLM");
       } else {
         toast.error(result.message || "No se pudo optimizar el horario");
+      }
+    }
+  };
+
+  const handleScheduleFileSelect = React.useCallback(
+    async (selectedFile: File | null) => {
+      setScheduleFile(selectedFile);
+      if (selectedFile) {
+        const content = await selectedFile.text();
+        setSchedulePreview(content);
+      } else {
+        setSchedulePreview("");
+      }
+    },
+    []
+  );
+
+  const handleDownloadExample = React.useCallback(() => {
+    const csvContent = generateExampleScheduleCSV();
+    downloadCSV("ejemplo-horarios.csv", csvContent);
+    toast.success("Archivo de ejemplo descargado");
+  }, []);
+
+  const handleUploadSchedule = async () => {
+    if (!scheduleFile) return;
+
+    const csvContent = await scheduleFile.text();
+    const validation = validateScheduleCSV(csvContent);
+
+    if (!validation.valid) {
+      toast.error("El archivo CSV tiene errores");
+      validation.errors.forEach((error) => {
+        toast.error(error);
+      });
+      return;
+    }
+
+    const result = await updateSchedule(csvContent);
+
+    if (result) {
+      if (result.success) {
+        toast.success("Horario actualizado exitosamente");
+        setScheduleFile(null);
+        setSchedulePreview("");
+      } else {
+        toast.error(result.message || "No se pudo actualizar el horario");
       }
     }
   };
@@ -233,32 +298,61 @@ export function ProgramacionForm() {
               Programar manualmente
             </CardTitle>
             <CardDescription>
-              Modifica el horario manualmente según consideres
+              Sube un archivo CSV con los horarios manualmente programados
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <Button
-              onClick={handleOptimizeSchedule}
-              disabled={scheduleLoading}
+              onClick={handleDownloadExample}
               size="lg"
               className="w-full"
-              variant="secondary"
+              variant="outline"
             >
-              {scheduleLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Optimizando...
-                </>
-              ) : (
-                <>
-                  <Settings2 className="mr-2 h-4 w-4" />
-                  Modificar manualmente
-                </>
-              )}
+              <Download className="mr-2 h-4 w-4" />
+              Descargar Ejemplo CSV
             </Button>
+
+            <Separator />
+
+            <FileUploadDropzone
+              onFileSelect={handleScheduleFileSelect}
+              accept=".csv"
+              maxSizeMB={5}
+            />
+
+            {schedulePreview && (
+              <>
+                <div className="rounded-md border p-3">
+                  <p className="text-xs font-medium mb-2">Vista previa:</p>
+                  <pre className="text-xs max-h-32 overflow-auto bg-muted p-2 rounded">
+                    {schedulePreview.split("\n").slice(0, 10).join("\n")}
+                    {schedulePreview.split("\n").length > 10 && "\n..."}
+                  </pre>
+                </div>
+
+                <Button
+                  onClick={handleUploadSchedule}
+                  disabled={scheduleLoading}
+                  size="lg"
+                  className="w-full"
+                >
+                  {scheduleLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Subiendo horario...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="mr-2 h-4 w-4" />
+                      Subir Horario Manual
+                    </>
+                  )}
+                </Button>
+              </>
+            )}
+
             <p className="text-xs text-muted-foreground text-center">
-              El LLM analizará y optimizará el horario actual usando el system
-              prompt configurado
+              Descarga el ejemplo para ver el formato correcto del archivo CSV
             </p>
           </CardContent>
         </Card>

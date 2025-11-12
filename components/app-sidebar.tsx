@@ -6,6 +6,7 @@ import {
   Bot,
   Command,
   GalleryVerticalEnd,
+  Home,
   Settings2,
 } from "lucide-react";
 import * as React from "react";
@@ -47,10 +48,15 @@ const data = {
   ],
   navMain: [
     {
+      title: "Inicio",
+      url: "/dashboard",
+      icon: Home,
+      items: [],
+    },
+    {
       title: "Configuración",
       url: "#",
       icon: Settings2,
-      isActive: true,
       items: [
         {
           title: "Reglas",

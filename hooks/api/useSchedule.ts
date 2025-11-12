@@ -4,7 +4,6 @@ import type {
   GenerateScheduleResponse,
   OptimizeScheduleRequest,
   OptimizeScheduleResponse,
-  UpdateScheduleRequest,
   UpdateScheduleResponse,
   AgentScheduleResponse,
 } from "@/lib/types";
@@ -45,11 +44,11 @@ export function useSchedule() {
   );
 
   const updateSchedule = useCallback(
-    async (request: UpdateScheduleRequest): Promise<UpdateScheduleResponse | null> => {
+    async (csvContent: string): Promise<UpdateScheduleResponse | null> => {
       setLoading(true);
       setError(null);
       try {
-        const data = await scheduleService.updateSchedule(request);
+        const data = await scheduleService.updateSchedule(csvContent);
         return data;
       } catch (err) {
         setError(err instanceof Error ? err.message : "Error al actualizar el horario");

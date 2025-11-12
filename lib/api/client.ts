@@ -83,14 +83,16 @@ export class ApiClient {
     return this.handleResponse<T>(response);
   }
 
-  async put<T, D = unknown>(endpoint: string, data: D): Promise<T> {
+  async put<T, D = unknown>(endpoint: string, data: D, isPlainText = false): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
+    const headers: HeadersInit = isPlainText
+      ? { "Content-Type": "text/plain" }
+      : { "Content-Type": "application/json" };
+
     const response = await this.fetchWithTimeout(url, {
       method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(data),
+      headers,
+      body: isPlainText ? (data as string) : JSON.stringify(data),
     });
     return this.handleResponse<T>(response);
   }
