@@ -58,8 +58,17 @@ export class ApiClient {
     return response.json();
   }
 
-  async get<T>(endpoint: string): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}`;
+  async get<T>(endpoint: string, options?: { params?: Record<string, string | number> }): Promise<T> {
+    let url = `${this.baseUrl}${endpoint}`;
+
+    if (options?.params) {
+      const searchParams = new URLSearchParams();
+      Object.entries(options.params).forEach(([key, value]) => {
+        searchParams.append(key, String(value));
+      });
+      url += `?${searchParams.toString()}`;
+    }
+
     const response = await this.fetchWithTimeout(url, {
       method: "GET",
       headers: {
