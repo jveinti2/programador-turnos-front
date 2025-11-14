@@ -1,5 +1,7 @@
 # Programador de Turnos (Front)
 
+![](./public/img_1.png)
+
 Dashboard construido en **Next.js** que se conecta con el backend [`programador_turnos`](https://github.com/jveinti2/programador_turnos) para administrar y visualizar la programación de turnos de manera dinámica y asistida por IA.
 
 ## ✨ Funcionalidades principales
